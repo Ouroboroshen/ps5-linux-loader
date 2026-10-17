@@ -4,6 +4,7 @@
 #include "config.h"
 #include "iommu.h"
 #include "offsets.h"
+#include "shellcode_1360.h"
 #include "utils.h"
 #include <fcntl.h>
 #include <stdio.h>
@@ -69,19 +70,27 @@ int prepare_resume(void **shellcode_kernel, size_t *shellcode_kernel_len) {
     return -1;
   }
 
-  // Copy shellcode_kernel.
+  const uint8_t *shellcode_src = shellcode_kernel_bin;
+  size_t shellcode_len = shellcode_kernel_bin_len;
+  if (fw == 0x1360) {
+    shellcode_src = stock_shellcode_kernel_1360;
+    shellcode_len = stock_shellcode_kernel_1360_len;
+  }
+
   *shellcode_kernel =
-      mmap(NULL, ALIGN_UP(shellcode_kernel_bin_len, PAGE_SIZE),
+      mmap(NULL, ALIGN_UP(shellcode_len, PAGE_SIZE),
            PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-  *shellcode_kernel_len = shellcode_kernel_bin_len;
-  memcpy(*shellcode_kernel, shellcode_kernel_bin, shellcode_kernel_bin_len);
+  if (*shellcode_kernel == MAP_FAILED)
+    return -1;
+  *shellcode_kernel_len = shellcode_len;
+  memcpy(*shellcode_kernel, shellcode_src, shellcode_len);
 
   uint64_t args_va = prepare_sck_args();
   if (update_sck_args_ptr((uint64_t)*shellcode_kernel, args_va))
     return -1;
 
   // Install shellcode_kernel in kernel space.
-  for (int i = 0; i < shellcode_kernel_bin_len; i += PAGE_SIZE) {
+  for (size_t i = 0; i < shellcode_len; i += PAGE_SIZE) {
     install_page_syscore(kernel_cave_shellcode + i,
                          vtophys_user((uintptr_t)*shellcode_kernel + i), 0);
   }
