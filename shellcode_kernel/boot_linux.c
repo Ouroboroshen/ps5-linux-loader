@@ -60,11 +60,24 @@ struct dig_transmitter_control_parameters_v1_6 {
 
 static struct linux_info info;
 
+#if defined(FW_13XX_PORT)
+static int *mp3_req, *mp3_rsp;
+#else
 static int mp3_req[1281], mp3_rsp[1282];
+#endif
 
 static inline void stac(void) { __asm__ volatile("stac" : : : "cc"); }
 
 static inline void clac(void) { __asm__ volatile("clac" : : : "cc"); }
+
+#if defined(FW_13XX_PORT)
+static uint64_t read_tsc(void) {
+  uint32_t lo, hi;
+  __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
+  return ((uint64_t)hi << 32) | lo;
+}
+
+#endif
 
 static inline uint64_t vmmcall(uint64_t nr, uint64_t a0, uint64_t a1,
                                uint64_t a2) {
@@ -169,6 +182,11 @@ void patch_hv(void) {
 }
 
 void boot_linux(void) {
+#if defined(FW_13XX_PORT)
+  mp3_rsp = (int *)(args.linux_info_va + 0x1000);
+  mp3_req = (int *)(args.linux_info_va + 0x2420);
+#endif
+
   patch_hv();
 
   // Common bootloader code
@@ -179,6 +197,12 @@ void boot_linux(void) {
   // Enable DP phys link.
   dp_enable_link_phy(4, 30);
 
+#if defined(FW_13XX_PORT)
+  uint64_t start = read_tsc();
+  while (read_tsc() - start < 0x14DC937FULL)
+    __asm__ volatile("pause");
+#endif
+
   // Initialize hdcp in mp3.
   mp3_initialize(0);
   mp3_set_hdcp_packet(0, 1);
@@ -187,6 +211,7 @@ void boot_linux(void) {
   // Copy bzImage and initrd into contiguous memory.
   memcpy(&info, (void *)args.linux_info_va, sizeof(struct linux_info));
 
+#if !defined(FW_13XX_PORT)
   info.n_tmrs = 0;
   if (args.fw_version >= 0x0500 && args.fw_version < 0x0800) {
     SceSblHvShm *shm = (SceSblHvShm *)PHYS_TO_DMAP(get_hv_shm());
@@ -200,6 +225,9 @@ void boot_linux(void) {
       }
     }
   }
+#else
+  info.n_tmrs = 0;
+#endif
 
   uintptr_t bzimage = info.bzimage;
   uintptr_t initrd = info.initrd;

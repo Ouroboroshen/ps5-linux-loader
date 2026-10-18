@@ -15,4 +15,5 @@ SECTIONS
         *(.bss)
         *(.bss.*)
     }
+    ASSERT(SIZEOF(.shell_code) <= (DEFINED(SHELLCODE_LIMIT) ? SHELLCODE_LIMIT : 0x100000), "shellcode exceeds kernel code cave")
 }

@@ -6,9 +6,11 @@
 #include "offsets.h"
 #include "shellcode_1360.h"
 #include "utils.h"
+#include "../shellcode_kernel_13xx/shellcode_kernel_13xx.h"
 #include <fcntl.h>
 #include <stdio.h>
 #include <sys/mman.h>
+#include <string.h>
 
 static int apply_1360_dma_e820_map(void *buffer, size_t length) {
   static const struct {
@@ -101,10 +103,16 @@ int prepare_resume(void **shellcode_kernel, size_t *shellcode_kernel_len) {
 
   const uint8_t *shellcode_src = shellcode_kernel_bin;
   size_t shellcode_len = shellcode_kernel_bin_len;
-  if (fw == 0x1360) {
+  if (fw == 0x1320) {
+    shellcode_src = shellcode_kernel_13xx_bin;
+    shellcode_len = shellcode_kernel_13xx_bin_len;
+  } else if (fw == 0x1360) {
     shellcode_src = stock_shellcode_kernel_1360;
     shellcode_len = stock_shellcode_kernel_1360_len;
   }
+
+  if (fw == 0x1320 && shellcode_len > 0x3910)
+    return -1;
 
   *shellcode_kernel =
       mmap(NULL, ALIGN_UP(shellcode_len, PAGE_SIZE),
@@ -120,7 +128,8 @@ int prepare_resume(void **shellcode_kernel, size_t *shellcode_kernel_len) {
   }
 
   uint64_t args_va = prepare_sck_args();
-  if (update_sck_args_ptr((uint64_t)*shellcode_kernel, args_va))
+  if (!args_va ||
+      update_sck_args_ptr((uint64_t)*shellcode_kernel, args_va))
     return -1;
 
   // Install shellcode_kernel in kernel space.
@@ -161,13 +170,15 @@ int update_sck_args_ptr(uint64_t shellcode, uint64_t args) {
 
 uint64_t prepare_sck_args(void) {
   shellcode_kernel_args args;
+  memset(&args, 0, sizeof(args));
   args.fw_version = fw;
   args.ktext = ktext;
   args.kdata = kdata;
   args.dmap_base = dmap;
 
   args.fun_printf = ktext + env_offset.FUN_PRINTF;
-  args.fun_hv_iommu_set_buffers = ktext + env_offset.FUN_HV_IOMMU_SET_BUFFERS;
+  args.fun_hv_iommu_set_buffers =
+      ktext + env_offset.FUN_HV_IOMMU_SET_BUFFERS;
   args.fun_hv_iommu_wait_completion =
       ktext + env_offset.FUN_HV_IOMM_WAIT_COMPLETION;
   args.fun_smp_rendezvous = ktext + env_offset.FUN_SMP_RENDEZVOUS;
@@ -188,8 +199,16 @@ uint64_t prepare_sck_args(void) {
 
   args.linux_info_va = linux_i.linux_info;
 
-  uint64_t args_cave = pa_to_dmap(alloc_page());
-  kernel_copyin(&args, args_cave, sizeof(args));
+  uint64_t args_pa = alloc_page();
+  if (!args_pa)
+    return 0;
+
+  uint64_t args_cave = pa_to_dmap(args_pa);
+  shellcode_kernel_args readback = {0};
+  if (kernel_copyin(&args, args_cave, sizeof(args)) ||
+      kernel_copyout((intptr_t)args_cave, &readback, sizeof(readback)) ||
+      memcmp(&args, &readback, sizeof(args)))
+    return 0;
 
   return args_cave;
 }

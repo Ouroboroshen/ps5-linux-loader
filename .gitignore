@@ -1,6 +1,7 @@
 bin/
 shellcode_0607/shellcode_0607.h
 shellcode_kernel/shellcode_kernel.h
+shellcode_kernel_13xx/shellcode_kernel_13xx.h
 shellcode_hv/shellcode_hv.h
 *.elf
 *.bin
