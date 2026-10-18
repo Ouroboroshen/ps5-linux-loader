@@ -103,7 +103,7 @@ int prepare_resume(void **shellcode_kernel, size_t *shellcode_kernel_len) {
 
   const uint8_t *shellcode_src = shellcode_kernel_bin;
   size_t shellcode_len = shellcode_kernel_bin_len;
-  if (fw == 0x1320) {
+  if (fw == 0x1300 || fw == 0x1320) {
     shellcode_src = shellcode_kernel_13xx_bin;
     shellcode_len = shellcode_kernel_13xx_bin_len;
   } else if (fw == 0x1360) {
@@ -111,7 +111,7 @@ int prepare_resume(void **shellcode_kernel, size_t *shellcode_kernel_len) {
     shellcode_len = stock_shellcode_kernel_1360_len;
   }
 
-  if (fw == 0x1320 && shellcode_len > 0x3910)
+  if ((fw == 0x1300 || fw == 0x1320) && shellcode_len > 0x3910)
     return -1;
 
   *shellcode_kernel =
