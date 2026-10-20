@@ -202,6 +202,7 @@ int fetch_linux(struct linux_info *info) {
   info->vram_size = vram_size;
   info->kit_type = (int)get_kit_type();
   strcpy(info->cmdline, cmdline);
+  info->fw_version = fw == 0x1320 ? fw : 0;
 
   uint64_t page = alloc_page();
   kwrite(pa_to_dmap(page), info, sizeof(struct linux_info));

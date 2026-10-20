@@ -121,6 +121,7 @@ struct linux_info {
   int n_tmrs;
   tmr tmrs[64];
   char cmdline[2048];
+  uint16_t fw_version;
 };
 
 #endif

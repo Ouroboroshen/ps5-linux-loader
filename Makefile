@@ -23,7 +23,11 @@ all: $(SC_0607_H) $(SC_HV_H) $(SC_K_H) $(SC_K_13XX_H) $(BIN)
 $(SC_0607_H):
 	$(MAKE) -C shellcode_0607
 
-$(SC_HV_H):
+$(SC_HV_H): shellcode_hv/main.c shellcode_hv/utils.c \
+		shellcode_hv/boot_linux.c shellcode_hv/boot_linux.h \
+		shellcode_hv/shellcode_hv_args.h shellcode_hv/utils.h \
+		shellcode_hv/linker.ld shellcode_hv/Makefile \
+		include/config.h include/linux.h
 	$(MAKE) -C shellcode_hv
 
 $(SC_K_H):

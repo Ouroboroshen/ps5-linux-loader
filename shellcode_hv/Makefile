@@ -15,13 +15,15 @@ dump = shellcode_hv.h
 
 SRC = main.c utils.c boot_linux.c
 OBJ = $(SRC:.c=.o)
+HEADERS = boot_linux.h shellcode_hv_args.h utils.h ../include/config.h \
+	../include/linux.h
 
 all: $(dump)
 
 $(TARGET): $(OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJ) -o $(TARGET)
 
-%.o: %.c
+$(OBJ): %.o: %.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(TEXT_BIN): $(TARGET)

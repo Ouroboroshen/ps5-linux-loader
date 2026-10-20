@@ -57,8 +57,13 @@ static void e820_memory_setup(struct boot_params *bp) {
   append_e820_table(bp, 0x000070000, 0x0000a0000, E820_TYPE_RESERVED);
   append_e820_table(bp, 0x0000a0000, 0x0000c0000, E820_TYPE_RESERVED);
   append_e820_table(bp, 0x0000c0000, 0x000100000, E820_TYPE_RESERVED); // VBIOS
-  append_e820_table(bp, 0x000100000, 0x03fffc000, E820_TYPE_RAM);
-  append_e820_table(bp, 0x03fffc000, 0x040000000, E820_TYPE_RESERVED);
+  if (info.fw_version == 0x1320) {
+    append_e820_table(bp, 0x000100000, 0x001000000, E820_TYPE_RAM);
+    append_e820_table(bp, 0x001000000, 0x040000000, E820_TYPE_RESERVED);
+  } else {
+    append_e820_table(bp, 0x000100000, 0x03fffc000, E820_TYPE_RAM);
+    append_e820_table(bp, 0x03fffc000, 0x040000000, E820_TYPE_RESERVED);
+  }
   append_e820_table(bp, 0x040000000, 0x060000000, E820_TYPE_RAM);
   append_e820_table(bp, 0x060000000, 0x060800000, E820_TYPE_RESERVED); // MP4
   append_e820_table(bp, 0x060800000, 0x060c00000, E820_TYPE_RESERVED); // VCN FW
